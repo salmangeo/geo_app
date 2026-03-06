@@ -1,0 +1,9 @@
+flask
+gunicorn
+pandas
+pygbif
+geopandas
+folium
+shapely
+fiona
+pyproj

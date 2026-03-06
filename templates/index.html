@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GBIF Dashboard</title>
+
+        <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+</head>
+<body>
+
+<h2>Upload CSV File (with 'species' column)</h2>
+<input type="file" id="file-input" />
+<button onclick="uploadFile()">Upload</button>
+<p id="upload-status"></p>
+
+<button onclick="fetchGbifData()">Fetch GBIF Data</button>
+<p id="fetch-status"></p>
+
+<button onclick="saveCsv()">Save Fetched Data as CSV</button>
+<p id="save-status"></p>
+
+<h2>Interactive Leaflet Map</h2>
+<button onclick="loadLeafletPoints()">Show Tree Locations</button>
+<div id="leaflet-map" style="width: 800px; height: 600px; margin-top: 10px;"></div>
+
+<script>
+function uploadFile() {
+    let fileInput = document.getElementById('file-input');
+    let status = document.getElementById('upload-status');
+    if (fileInput.files.length === 0) {
+        alert('Please select a file.');
+        return;
+    }
+    let formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    fetch('/upload', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            status.innerText = data.error || `Uploaded. ${data.genera_count} genera found.`;
+        });
+}
+
+function fetchGbifData() {
+    let status = document.getElementById('fetch-status');
+
+    let bounds = leafletMap.getBounds();
+
+    let bbox = {
+        lat_min: bounds.getSouth(),
+        lat_max: bounds.getNorth(),
+        lon_min: bounds.getWest(),
+        lon_max: bounds.getEast()
+    };
+
+    fetch('/fetch_gbif', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bbox)
+    })
+    .then(res => res.json())
+    .then(data => {
+        status.innerText = data.error || data.status;
+        if (!data.error) loadLeafletPoints();
+    });
+}
+
+
+function saveCsv() {
+    let status = document.getElementById('save-status');
+    fetch('/save_csv', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            status.innerText = data.error || data.status;
+        });
+}
+
+// Initialize Leaflet map
+let leafletMap = L.map('leaflet-map').setView([31.5, 77.8], 9);
+
+// Base map
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+}).addTo(leafletMap);
+
+// Layer group to hold markers
+let markerLayer = L.layerGroup().addTo(leafletMap);
+
+function loadLeafletPoints() {
+    fetch('/get_points')
+        .then(res => res.json())
+        .then(data => {
+            markerLayer.clearLayers();
+
+            if (data.length === 0) {
+                alert("No data available.");
+                return;
+            }
+
+            data.forEach(point => {
+                let marker = L.circleMarker([point.lat, point.lon], {
+                    radius: 5,
+                    color: "green",
+                    fillOpacity: 0.7
+                }).bindPopup(
+                    `<b>Genus:</b> ${point.genus || "NA"}<br>
+                     <b>Species:</b> ${point.species || "NA"}<br>
+                     <b>Source:</b> ${point.source || "NA"}`
+                );
+
+                markerLayer.addLayer(marker);
+            });
+
+            // Auto zoom to markers
+            let group = new L.featureGroup(markerLayer.getLayers());
+            leafletMap.fitBounds(group.getBounds());
+        });
+}
+
+
+</script>
+
+</body>
+</html>
