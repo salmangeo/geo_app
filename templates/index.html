@@ -1,127 +1,168 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <title>GBIF Dashboard</title>
 
-        <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<title>Plant Occurrence & Climate Dashboard</title>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+
+body{
+font-family: Arial, Helvetica, sans-serif;
+margin:0;
+padding:0;
+}
+
+h2{
+padding:10px;
+background:#2c3e50;
+color:white;
+margin:0;
+}
+
+.container{
+display:flex;
+height:90vh;
+}
+
+.panel{
+padding:15px;
+overflow:auto;
+}
+
+.left-panel{
+width:250px;
+border-right:1px solid #ddd;
+background:#f7f7f7;
+}
+
+.map-panel{
+flex:1;
+padding:10px;
+}
+
+.right-panel{
+width:420px;
+border-left:1px solid #ddd;
+background:#fafafa;
+}
+
+button{
+margin-top:5px;
+padding:6px 10px;
+cursor:pointer;
+}
+
+#leaflet-map{
+height:650px;
+width:100%;
+border:1px solid #ccc;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+font-size:12px;
+}
+
+table th, table td{
+border:1px solid #ccc;
+padding:5px;
+text-align:left;
+}
+
+table th{
+background:#eaeaea;
+}
+
+.status{
+font-size:12px;
+color:#444;
+margin-bottom:10px;
+}
+
+pre{
+white-space:pre-wrap;
+font-size:11px;
+}
+
+</style>
 
 </head>
+
 <body>
 
-<h2>Upload CSV File (with 'species' column)</h2>
-<input type="file" id="file-input" />
-<button onclick="uploadFile()">Upload</button>
-<p id="upload-status"></p>
+<h2>Plant Occurrence Dashboard (GBIF + Climate)</h2>
 
-<button onclick="fetchGbifData()">Fetch GBIF Data</button>
-<p id="fetch-status"></p>
+<div class="container">
 
-<button onclick="saveCsv()">Save Fetched Data as CSV</button>
-<p id="save-status"></p>
+<!-- LEFT PANEL -->
 
-<h2>Interactive Leaflet Map</h2>
-<button onclick="loadLeafletPoints()">Show Tree Locations</button>
-<div id="leaflet-map" style="width: 800px; height: 600px; margin-top: 10px;"></div>
+<div class="panel left-panel">
 
-<script>
-function uploadFile() {
-    let fileInput = document.getElementById('file-input');
-    let status = document.getElementById('upload-status');
-    if (fileInput.files.length === 0) {
-        alert('Please select a file.');
-        return;
-    }
-    let formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-    fetch('/upload', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
-            status.innerText = data.error || `Uploaded. ${data.genera_count} genera found.`;
-        });
-}
+<h3>Upload Plant List</h3>
 
-function fetchGbifData() {
-    let status = document.getElementById('fetch-status');
+<input type="file" id="file-input"/>
+<button onclick="uploadFile()">Upload CSV</button>
 
-    let bounds = leafletMap.getBounds();
+<p id="upload-status" class="status"></p>
 
-    let bbox = {
-        lat_min: bounds.getSouth(),
-        lat_max: bounds.getNorth(),
-        lon_min: bounds.getWest(),
-        lon_max: bounds.getEast()
-    };
+<hr>
 
-    fetch('/fetch_gbif', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bbox)
-    })
-    .then(res => res.json())
-    .then(data => {
-        status.innerText = data.error || data.status;
-        if (!data.error) loadLeafletPoints();
-    });
-}
+<button onclick="fetchGbifData()">Fetch Occurrences</button>
+<p id="fetch-status" class="status"></p>
+
+<hr>
+
+<button onclick="calculateClimate()">Get Climate Data (5 points)</button>
+
+</div>
 
 
-function saveCsv() {
-    let status = document.getElementById('save-status');
-    fetch('/save_csv', { method: 'POST' })
-        .then(res => res.json())
-        .then(data => {
-            status.innerText = data.error || data.status;
-        });
-}
+<!-- MAP PANEL -->
 
-// Initialize Leaflet map
-let leafletMap = L.map('leaflet-map').setView([31.5, 77.8], 9);
+<div class="panel map-panel">
 
-// Base map
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-}).addTo(leafletMap);
+<h3>Occurrence Map</h3>
 
-// Layer group to hold markers
-let markerLayer = L.layerGroup().addTo(leafletMap);
+<div id="leaflet-map"></div>
 
-function loadLeafletPoints() {
-    fetch('/get_points')
-        .then(res => res.json())
-        .then(data => {
-            markerLayer.clearLayers();
+<button style="margin-top:10px" onclick="loadLeafletPoints()">
+Reload Map Points
+</button>
 
-            if (data.length === 0) {
-                alert("No data available.");
-                return;
-            }
-
-            data.forEach(point => {
-                let marker = L.circleMarker([point.lat, point.lon], {
-                    radius: 5,
-                    color: "green",
-                    fillOpacity: 0.7
-                }).bindPopup(
-                    `<b>Genus:</b> ${point.genus || "NA"}<br>
-                     <b>Species:</b> ${point.species || "NA"}<br>
-                     <b>Source:</b> ${point.source || "NA"}`
-                );
-
-                markerLayer.addLayer(marker);
-            });
-
-            // Auto zoom to markers
-            let group = new L.featureGroup(markerLayer.getLayers());
-            leafletMap.fitBounds(group.getBounds());
-        });
-}
+</div>
 
 
-</script>
+<!-- RIGHT PANEL -->
+
+<div class="panel right-panel">
+
+<h3>Climate API Results</h3>
+
+<table id="climate-table">
+
+<thead>
+<tr>
+<th>Latitude</th>
+<th>Longitude</th>
+<th>Plant</th>
+<th>Climate API Result</th>
+</tr>
+</thead>
+
+<tbody></tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<script src="/static/js/main.js"></script>
 
 </body>
 </html>

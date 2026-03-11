@@ -4,7 +4,7 @@ import pandas as pd
 from gbif_utils import fetch_all_genera_occurrences
 from map_utils import create_folium_map, folium_map_to_html, save_gdf
 from inat_utils import fetch_all_inat_occurrences
-
+from climate_utils import calculate_climate_dataframe
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'  # Replace with a strong secret key
@@ -117,6 +117,26 @@ def get_points():
 
     points = df[['lat', 'lon', 'genus', 'species', 'source']].to_dict(orient='records')
     return jsonify(points)
+
+@app.route("/calculate_climate")
+def calculate_climate():
+
+    global stored_occurrences
+
+    if stored_occurrences is None:
+        return jsonify([])
+
+    df = stored_occurrences.copy()
+
+    df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
+    df["lon"] = pd.to_numeric(df["lon"], errors="coerce")
+
+    df = df.dropna(subset=["lat","lon"])
+
+    climate_df = calculate_climate_dataframe(df.head(50))
+
+    return jsonify(climate_df.to_dict(orient="records"))
+
 
 if __name__ == '__main__':
     app.run()
